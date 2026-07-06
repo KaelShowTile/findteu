@@ -13,6 +13,13 @@
 	"upload_source_maps": true,
 	"compatibility_flags": [
 		"nodejs_compat"
+	],
+	"d1_databases": [
+		{
+			"binding": "findteu_db",
+			"database_name": "findteu-db",
+			"database_id": "89719efe-fe91-40ca-907a-6cfbec368425"
+		}
 	]
 	/**
 	 * Smart Placement
