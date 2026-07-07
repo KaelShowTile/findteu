@@ -140,4 +140,45 @@ app.get('/api/containers/:number', async (c) => {
   }
 });
 
+// API for local Tauri App to initiate tracking for a new container on findTEU
+app.post('/api/containers/:number/track', async (c) => {
+  const apiKey = c.req.header('x-api-key');
+  if (apiKey !== c.env.TAURI_API_KEY) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const number = c.req.param('number');
+  
+  try {
+    const params = new URLSearchParams();
+    params.append('use_webhook', 'true');
+
+    const response = await fetch(`https://api.findteu.com/container/${number}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-Authorization-ApiKey': c.env.WEBHOOK_API_KEY
+      },
+      body: params.toString()
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`FindTEU API error for ${number}:`, errorText);
+      return c.json({ error: 'Failed to add tracking on FindTEU', details: errorText }, response.status as any);
+    }
+
+    const data = await response.json();
+    
+    return c.json({ 
+      success: true, 
+      message: `Tracking initiated for container ${number}. Webhook will receive updates shortly.`, 
+      findteu_response: data 
+    });
+  } catch (error: any) {
+    console.error(`Error initiating tracking for container ${number}:`, error);
+    return c.json({ error: 'Internal Server Error' }, 500);
+  }
+});
+
 export default app;
