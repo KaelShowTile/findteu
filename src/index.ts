@@ -10,9 +10,13 @@ const app = new Hono<{ Bindings: Env }>();
 
 // Webhook endpoint for findTEU
 app.post('/webhook/findteu', async (c) => {
-  // Validate FindTEU API Key
-  const apiKey = c.req.header('X-Authorization-ApiKey');
-  if (apiKey !== c.env.WEBHOOK_API_KEY) {
+  // FindTEU may not send the API key in the headers for webhooks. 
+  // We check both the header and a URL query parameter (?token=...)
+  const headerKey = c.req.header('X-Authorization-ApiKey');
+  const queryKey = c.req.query('token');
+  
+  if (headerKey !== c.env.WEBHOOK_API_KEY && queryKey !== c.env.WEBHOOK_API_KEY) {
+    console.error('Webhook authentication failed. Headers:', c.req.header());
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
