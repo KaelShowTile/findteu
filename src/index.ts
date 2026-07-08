@@ -42,7 +42,14 @@ app.post('/webhook/findteu', async (c) => {
     }
     
     // Try to extract container number from standard paths FindTEU might use
-    const containerNumber = payload.containerNumber || payload.container_number || payload.number || payload.id || (payload.container && payload.container.number) || (payload.data && payload.data.container && payload.data.container.number);
+    // Prioritize container_number or container.number before generic 'id' fields.
+    const containerNumber = 
+      payload.containerNumber || 
+      payload.container_number || 
+      (payload.container && payload.container.number) || 
+      (payload.data && payload.data.container && payload.data.container.number) ||
+      payload.number || 
+      payload.id;
     
     if (!containerNumber) {
       // If we still can't find it, we don't crash, we just return 200 to acknowledge receipt to avoid retry loops, but log it.
@@ -112,7 +119,8 @@ app.get('/api/containers', async (c) => {
         created_at: row.created_at,
         updated_at: row.updated_at,
         first_data,
-        latest_data
+        latest_data,
+        ...(latest_data?.data || latest_data || {}) // Spread findTEU's payload data to the root for easier access
       };
     });
 
@@ -153,7 +161,8 @@ app.get('/api/containers/:number', async (c) => {
       created_at: container.created_at,
       updated_at: container.updated_at,
       first_data,
-      latest_data
+      latest_data,
+      ...(latest_data?.data || latest_data || {}) // Spread findTEU's payload data to the root for easier access
     };
 
     return c.json(result);
