@@ -16,23 +16,40 @@ app.post('/webhook/findteu', async (c) => {
   const headerKey = c.req.header('X-Authorization-ApiKey');
   const queryKey = c.req.query('k') || c.req.query('token');
   
-  if (headerKey !== c.env.WEBHOOK_API_KEY && queryKey !== c.env.WEBHOOK_API_KEY) {
-    console.error('Webhook auth failed. URL too long? QueryKey:', queryKey);
+  const expectedKey = (c.env.WEBHOOK_API_KEY || '').trim();
+  const actualHeader = (headerKey || '').trim();
+  const actualQuery = (queryKey || '').trim();
+
+  if (actualHeader !== expectedKey && actualQuery !== expectedKey) {
+    console.error('Webhook auth failed. Expected:', expectedKey, 'Got Query:', actualQuery);
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
   try {
-    const payload = await c.req.json();
+    let payload;
+    const bodyText = await c.req.text();
     
-    // We assume the payload contains the container number.
-    // Given we don't have the exact schema, we fallback to common property names
-    const containerNumber = payload.containerNumber || payload.container_number || payload.number || payload.id;
-    
-    if (!containerNumber) {
-      return c.json({ error: 'Missing container number in payload' }, 400);
+    // FindTEU might send an empty test ping to verify the endpoint is alive
+    if (!bodyText) {
+      return c.json({ success: true, message: 'Endpoint verified' }, 200);
+    }
+
+    try {
+      payload = JSON.parse(bodyText);
+    } catch (e) {
+      // Not JSON, maybe form-data?
+      return c.json({ error: 'Invalid JSON payload' }, 400);
     }
     
-    const status = payload.status || payload.currentStatus || 'UNKNOWN';
+    // Try to extract container number from standard paths FindTEU might use
+    const containerNumber = payload.containerNumber || payload.container_number || payload.number || payload.id || (payload.container && payload.container.number) || (payload.data && payload.data.container && payload.data.container.number);
+    
+    if (!containerNumber) {
+      // If we still can't find it, we don't crash, we just return 200 to acknowledge receipt to avoid retry loops, but log it.
+      return c.json({ success: true, message: 'Payload received but no container number found' }, 200);
+    }
+    
+    const status = payload.status || payload.currentStatus || (payload.data && payload.data.status) || 'UNKNOWN';
     const payloadStr = JSON.stringify(payload);
 
     // Check if the container already exists
@@ -64,8 +81,9 @@ app.post('/webhook/findteu', async (c) => {
 
     return c.json({ success: true, message: 'Webhook received and processed' });
   } catch (error: any) {
-    console.error('Error processing webhook:', error);
-    return c.json({ error: 'Internal Server Error' }, 500);
+    console.error('Error processing webhook:', error.message || error);
+    // If it's a D1 "no such table" error, it will be caught here.
+    return c.json({ error: 'Internal Server Error', details: error.message }, 500);
   }
 });
 
